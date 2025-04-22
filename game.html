@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" x-data="battleshipGame()">
+<head>
+  <meta charset="UTF-8" />
+  <title>Battleship - Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-[#0f172a] text-white min-h-screen flex flex-col items-center justify-center px-4 py-6">
+  <div class="w-full max-w-5xl space-y-6 text-center">
+    <h1 class="text-4xl font-bold text-cyan-300">Battleship Game</h1>
+
+    <!-- Turn Indicator -->
+    <div class="text-lg font-semibold text-cyan-200">
+      <span x-text="turnMessage"></span>
+    </div>
+
+    <!-- Grids -->
+    <div class="flex flex-col md:flex-row justify-center gap-10">
+      <div>
+        <h2 class="text-xl text-cyan-300 mb-2">Your Board</h2>
+        <div class="grid grid-cols-5 gap-1">
+          <template x-for="r in 5">
+            <template x-for="c in 5">
+              <div class="w-12 h-12 border rounded bg-blue-900"
+                :class="getPlayerCellColor(r-1, c-1)">
+              </div>
+            </template>
+          </template>
+        </div>
+      </div>
+
+      <div>
+        <h2 class="text-xl text-cyan-300 mb-2">Opponent</h2>
+        <div class="grid grid-cols-5 gap-1">
+          <template x-for="r in 5">
+            <template x-for="c in 5">
+              <div class="w-12 h-12 border rounded bg-blue-900"
+                :class="getOpponentCellColor(r-1, c-1)">
+              </div>
+            </template>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="mt-6 flex justify-center gap-6">
+      <button @click="restartGame" class="w-40 bg-rose-600 py-2 rounded hover:bg-rose-700">Restart</button>
+    </div>
+
+    <!-- Game Over Popup -->
+    <div x-show="gameOver" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+      <div class="bg-gray-800 p-6 rounded text-center">
+        <h2 class="text-3xl mb-4" x-text="winnerMessage"></h2>
+        <button @click="restartGame" class="bg-green-600 px-6 py-2 rounded hover:bg-green-700">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function battleshipGame() {
+      return {
+        playerBoard: Array(5).fill(null).map(() => Array(5).fill('E')),
+        opponentBoard: Array(5).fill(null).map(() => Array(5).fill('E')),
+        isPlayerTurn: false,
+        gameOver: false,
+        winner: null,
+        ws: null,
+
+        get turnMessage() {
+          return this.gameOver
+            ? ''
+            : this.isPlayerTurn
+              ? "Your turn"
+              : "Waiting for opponent...";
+        },
+
+        get winnerMessage() {
+          return this.winner === "player" ? "🎉 You win!" : "💥 You lose!";
+        },
+
+        getPlayerCellColor(r, c) {
+          const val = this.playerBoard[r][c];
+          if (val === 'H') return 'bg-red-600';
+          if (val === 'M') return 'bg-green-700';
+          if (val === 'S') return 'bg-yellow-500';
+          if (val === 'X') return 'bg-red-600';
+          return '';
+        },
+
+        getOpponentCellColor(r, c) {
+          const val = this.opponentBoard[r][c];
+          if (val === 'H') return 'bg-red-600';
+          if (val === 'M') return 'bg-green-700';
+          if (val === 'S') return 'bg-yellow-500';
+          if (val === 'X') return 'bg-red-600';
+          return '';
+        },
+
+        restartGame() {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+              this.ws.send("restart"); // 🔁 Inform ESP32
+            }
+            setTimeout(() => {
+                this.ws.close();
+              window.location.href = "setup.html";
+            }, 200); // small delay to let message go through
+          },
+
+          connectWebSocket() {
+            this.ws = new WebSocket("ws://192.168.1.44/ws");
+          
+            this.ws.onopen = () => {
+              this.ws.send("init");
+              console.log("Connected to WebSocket");
+            };
+          
+            this.ws.onmessage = (event) => {
+              const data = JSON.parse(event.data);
+              console.log("WS →", event.data);
+              if (data.type === "update" || data.type === "init") {
+                this.playerBoard = JSON.parse(JSON.stringify(data.player));
+                this.opponentBoard = JSON.parse(JSON.stringify(data.opponent));
+                this.isPlayerTurn = data.turn === "player";
+              }
+          
+              if (data.type === "result") {
+                this.winner = data.winner;
+                this.gameOver = true;
+              }
+            };
+          },          
+
+        init() {
+          this.connectWebSocket();
+        }
+      }
+    }
+  </script>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('battleshipGame', battleshipGame);
+    });
+  </script>
+</body>
+</html>
